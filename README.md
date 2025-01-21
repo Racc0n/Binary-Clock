@@ -19,12 +19,13 @@ Minute 2<sup>2</sup>: `PC3`
 Minute 2<sup>3</sup>: `PC2`  
 Minute 2<sup>4</sup>: `PC1`  
 Minute 2<sup>5</sup>: `PC0` 
-Helligkeit `PB02(OC1B)`
+Helligkeit:           `PB02(OC1B)`
 
 ### Taster  
 Taster 1: `PB0`  
 Taster 2: `PB1`  
 Taster 3: `PD2`
+
 ### Sonstiges
 Uhrenquarz: `PB6` + `PB7`
 ISP-Adapter: `PB03` + `PB04` + `PB05`
