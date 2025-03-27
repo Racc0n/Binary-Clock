@@ -15,6 +15,16 @@ volatile uint8_t hours   = 12;  // Stunden (0-23)
 volatile uint8_t minutes =  0;  // Minuten (0-59)
 volatile uint8_t seconds =  0;  // Sekunden (intern gezählt)
 
+
+// --------------- Unbenötigte Sachen ------------- 
+void disable_unused_peripherals(void) {
+    PRR |= (1 << PRADC); //ADC
+    PRR |= (1 << PRTIM0); //Timer0
+    PRR |= (1 << PRUSART0); //USART
+    PRR |= (1 << PRSPI); //SPI
+    ACSR |= (1 << ACD); //ACD
+}
+
 // Timeout für die Anzeige (in Sekunden); wird bei manueller Eingabe auf 10 gesetzt.
 volatile uint8_t display_timeout = 10;
 
@@ -126,6 +136,7 @@ int main(void) {
     init_io();
     init_pwm();
     init_timer2();
+    disable_unused_peripherals();
     sei();  // Globale Interrupts aktivieren
 
     // Setze initial die PWM-Werte gemäß brightness_index
