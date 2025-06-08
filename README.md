@@ -1,34 +1,144 @@
-# ATmega48A - Binäruhr
-Dieses Projekt entstand in meinem 5. Semester an der Hochschule für Technik, Wirtschaft und Kultur Leipzig (HTWK) als Prüfungsleistung für das Modul _Systemnahe Programmierung_. Die Aufgabe war mit einer selbst-designten Leiterplatine und vorgegebenen Bauteilen eine Uhr zu bauen und programmieren, welche die Uhrzeit in Binär anzeigt. Den Kern der Platine bildet ein ATmega48A Mikrocontroller.
+# Dokumenten-Service – Lokaler Setup & Testablauf
 
-Programmiert wird der ATMega48A über einen AVR-ISPMKII Adapter und der Software AVRDude.
-## Pin-Belegung
-<img src="atmega_layout.png" width="500">
+## Voraussetzungen
 
-### Stunden-LEDs (Links)
-Stunde 2<sup>0</sup>: `PD3`  
-Stunde 2<sup>1</sup>: `PD4`  
-Stunde 2<sup>2</sup>: `PD5`  
-Stunde 2<sup>3</sup>: `PD6`  
-Stunde 2<sup>4</sup>: `PD7`
-Helligkeit: `PB01(OC1A)`
-### Minuten-LEDs (Rechts)
-Minute 2<sup>0</sup>: `PC5`  
-Minute 2<sup>1</sup>: `PC4`  
-Minute 2<sup>2</sup>: `PC3`     
-Minute 2<sup>3</sup>: `PC2`  
-Minute 2<sup>4</sup>: `PC1`  
-Minute 2<sup>5</sup>: `PC0` 
-Helligkeit:           `PB02(OC1B)`
+- **Node.js** ≥ 14 (mit npm)  
+- **Docker Desktop** (für Windows/macOS) oder Docker Engine (Linux)  
+- **Git Bash** oder eine POSIX-kompatible Shell (optional für `curl`)  
+- **PowerShell** (für Windows-native Tests)  
 
-### Taster  
-Taster 1: `PB0`  
-Taster 2: `PB1`  
-Taster 3: `PD2`
+---
 
-### Sonstiges
-Uhrenquarz: `PB6` + `PB7`
-ISP-Adapter: `PB03` + `PB04` + `PB05`
+## 1. MinIO als lokaler S3-Emulator aufsetzen
 
-### Erste Schritte
-Am Anfang entstand nur ein einfaches Programm, welches alle LED's zum Leuchten bringen sollte, um die Funktionalität dieser zu zeigen/Testen.
+1. **Datenverzeichnis anlegen**:  
+   ```bash
+   mkdir "%USERPROFILE%\minio-data"
+2. **MinIO-Container starten (Windows CMD/Powershell)**:
+    ```powershell
+    docker run -d --name minio `
+    -p 9000:9000 -p 9001:9001 `
+    -v "C:\Users\<DeinUser>\minio-data:/data" `
+    -e "MINIO_ROOT_USER=minioadmin" `
+    -e "MINIO_ROOT_PASSWORD=minioadmin" `
+    minio/minio server /data --console-address ":9001"
+3. **MinIO-Konsople öffnen unter http://localhost:9001 und amelden mit minioadmin / minioadmin**
+4. **Bucket erstellen: test-bucket**
+
+## 2. Projekt vorbereiten 
+
+1. **Ordner wechseln**
+    cd /Desktop/Document-Service
+2. **Abhängigkeiten installieren:**
+    *npm install express multer @aws-sdk/client-s3 sequelize sqlite3 axios dotenv*
+
+3. **Verzeichnisstruktur prüfen:**
+    Document-service/
+    ├── src/
+    │   ├── config/aws.js
+    │   ├── controllers/
+    │   ├── models/
+    │   ├── services/
+    │   ├── app.js
+    │   └── index.js
+    ├── tests/fixtures/sample.pdf
+    ├── .env.local
+    ├── package.json
+    └── README.md
+
+## 3. Umgebungsvariablen konfigurieren 
+
+1. **Im Projekt-Root die Datei .env.local überprüfen (sollte schon so angelegt sein):**
+    ```bash
+    # MinIO (lokaler S3)
+    S3_BUCKET=test-bucket
+    AWS_ACCESS_KEY_ID=minioadmin
+    S3_SECRET_ACCESS_KEY=minioadmin
+    S3_ENDPOINT=http://localhost:9000
+    S3_FORCE_PATH_STYLE=true
+    # Antragsservice-Mock
+    ANTRAGS_SERVICE_BASE_URL=http://localhost:5000
+    # SQLite-Datenbank
+    DB_STORAGE=./data/test-db.sqlite
+    # Validierung
+    MAX_FILE_SIZE=5242880
+    ALLOWED_MIME_TYPES=image/jpeg,image/png,application/pdf
+    ```
+2. **src/config/aws.js überprüfen (sollte schon so angelegt sein):**
+    ```javascript
+    import { S3Client } from "@aws-sdk/client-s3";
+    import dotenv from "dotenv";
+    dotenv.config({ path: ".env.local" });
+    export const s3Client = new S3Client({
+    region: process.env.AWS_REGION,
+    endpoint: process.env.S3_ENDPOINT,
+    forcePathStyle: process.env.S3_FORCE_PATH_STYLE === "true",
+    credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+        }
+    });
+    export const bucketName = process.env.S3_BUCKET;
+    ```
+
+## 4. Mock-Antragsservice starten
+
+1. **src/mock-antrag.js überprüfen (sollte schon so angelegt sein):**
+    ```javascript
+    import express from "express";
+    const app = express();
+    app.use(express.json());
+
+    app.post(
+    "/api/antrag/:antragId/dokument/:dokumentId/link",
+    (req, res) => {
+        console.log(
+        `Mock linkDokument: antrag=${req.params.antragId}, dokument=${req.params.dokumentId}`
+        );
+        res.status(204).end();
+    }
+    );
+
+    app.listen(5000, () => console.log("Antragsservice-Mock auf http://localhost:5000"));
+    ```
+2. **Mock-Service in neuem Terminal starten:**
+    3. **Erwartung: Antragsservice-Mock auf http://localhost:5000“**
+```bash
+node src/mock-antrag.js
+```
+
+## 5. Datenbank initialisieren
+
+1. **Ordner anlegen**
+```bash
+mkdir data
+```
+2. **Tabelle anlegen:**
+```bash
+node -e "import('./src/models/dokumentMetadaten.js').then(m=>m.initDb())"
+```
+
+## 6. Dokumentenservice Starten
+1. **Im Rootverzeichnis:**
+```bash
+node src/index.js
+```
+## 7. Upload Testen
+
+1. **In Git Bash**
+```bash
+curl -v \
+  -F "antragId=test123" \
+  -F "datei=@tests/fixtures/sample.pdf;type=application/pdf" \
+  http://localhost:3000/api/dokumente
+```
+Ergebnis:
+    HTTP/1.1 201 Created
+    JSON-Antwort mit { dokumentID, status: "VALIDIERT", uploadDatum }
+    Mock-Antragsterminal zeigt:
+```php
+Mock linkDokument: antrag=test123, dokument=<UUID>
+```
+    In MinIO-Bucket test-bucket erscheint sample.pdf
+
+
